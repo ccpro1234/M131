@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Baccarat DNA x10 PRO V10</title>
+<style>
+body{margin:0;font-family:Segoe UI,Arial;background:#0b1220;color:white}
+.top{display:flex;align-items:center;background:#020617;padding:10px}
+.betbar{font-size:20px;font-weight:bold;padding:10px 16px;min-width:220px}
+.countbar{font-size:13px;color:#e5e7eb}
+.buttons button{margin-left:6px;padding:6px 12px;font-weight:bold}
+.main{display:flex;padding:10px}
+.left{width:420px}
+.row{display:flex;align-items:center;margin-bottom:4px;padding:2px}
+.hist span{margin-right:2px;font-weight:bold}
+canvas{margin-left:10px;border:1px solid #334155}
+
+/* ===== LOGIN ===== */
+.login-wrap{
+ position:fixed;
+ inset:0;
+ background:#020617;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ z-index:10000;
+}
+.login-box{
+ background:#020617;
+ border:1px solid #334155;
+ padding:30px;
+ width:280px;
+ border-radius:10px;
+ text-align:center;
+}
+.login-box h2{margin-bottom:20px}
+.login-box input{
+ width:100%;
+ padding:8px;
+ margin-bottom:10px;
+ background:#0b1220;
+ border:1px solid #334155;
+ color:white;
+}
+.login-box button{
+ width:100%;
+ padding:8px;
+ font-weight:bold;
+}
+.login-error{color:#ef4444;font-size:12px;display:none}
+
+/* expiry bottom-right */
+.expiry-float{
+ position:fixed;
+ right:8px;
+ bottom:6px;
+ font-size:12px;
+ color:#fca5a5;
+ background:rgba(2,6,23,.85);
+ padding:4px 8px;
+ border:1px solid #7f1d1d;
+ border-radius:6px;
+ pointer-events:none;
+ z-index:9999;
+}
+
+/* expired screen */
+.expired{
+ display:flex;
+ flex-direction:column;
+ justify-content:center;
+ align-items:center;
+ height:100vh;
+ background:#020617;
+ text-align:center;
+}
+.expired h1{color:#ef4444;font-size:2rem}
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN SCREEN ===== -->
+<div class="login-wrap" id="loginWrap">
+ <div class="login-box">
+  <h2>Log in</h2>
+  <input id="user" placeholder="User">
+  <input id="pass" type="password" placeholder="Password">
+  <button onclick="login()">LOGIN</button>
+  <div class="login-error" id="loginErr">User หรือ Password ไม่ถูกต้อง</div>
+ </div>
+</div>
+
+<script>
+/* ===== LOGIN CHECK ===== */
+function login(){
+ const u=document.getElementById("user").value;
+ const p=document.getElementById("pass").value;
+ if(u==="1234" && p==="1234"){
+  document.getElementById("loginWrap").style.display="none";
+ }else{
+  document.getElementById("loginErr").style.display="block";
+ }
+}
+
+/* ===== EXPIRY CHECK ===== */
+const EXPIRY_DATE = new Date('2026-03-18T23:59:59');
+if(new Date() > EXPIRY_DATE){
+ document.body.innerHTML = `
+ <div class="expired">
+   <h1>โปรแกรมหมดอายุการใช้งาน</h1>
+   <p>18 มีนาคม พ.ศ. 2569</p>
+ </div>`;
+ throw new Error("expired");
+}
+</script>
+
+<div class="top">
+ <div id="betbar" class="betbar">P 0 / B 0</div>
+ <div id="countbar" class="countbar">P=0 B=0 T=0 TOTAL=0</div>
+ <div class="buttons" style="margin-left:auto">
+  <button onclick="play('P')">P</button>
+  <button onclick="play('B')">B</button>
+  <button onclick="play('T')">T</button>
+  <button onclick="play('UNDO')">UNDO</button>
+  <button onclick="play('CLEAR')">CLEAR</button>
+ </div>
+</div>
+
+<div class="main">
+ <div class="left" id="systems"></div>
+ <div>
+  <canvas id="bigroad" width="800" height="140"></canvas>
+  <canvas id="beadroad" width="800" height="140" style="background:white;margin-top:6px"></canvas>
+ </div>
+</div>
+
+<div class="expiry-float">Exp : 18 มีนาคม พ.ศ. 2569</div>
+
+<script>
+/* ===== CONST ===== */
+const ROWS=6, COLS=40, CELL=20, MAX_MARK=14;
+
+/* ===== SYSTEMS ===== */
+const SYSTEMS=[
+ ["DNA x",h=>h.at(-1)],
+ ["DNA ,",h=>h.at(-1)==="P"?"B":"P"],
+ ["DNA 2",h=>h.length>=2&&h.at(-1)==h.at(-2)?h.at(-1):(h.at(-1)==="P"?"B":"P")],
+ ["DNA /",h=>h.length%2===0?"P":"B"],
+ ["DNA 3",h=>h.length>=3&&h.slice(-3).every(v=>v===h.at(-1))?h.at(-1):(h.at(-1)==="P"?"B":"P")],
+ ["DNA =",h=>h.filter(x=>x==="P").length<=h.filter(x=>x==="B").length?"P":"B"],
+ ["DNA 5",h=>h.length>=5&&h.slice(-5).filter(x=>x==="P").length>h.slice(-5).filter(x=>x==="B").length?"P":"B"],
+ ["DNA C",h=>h.length>=4&&new Set(h.slice(-4)).size===1?(h.at(-1)==="P"?"B":"P"):h.at(-1)],
+ ["DNA T",h=>h.length>=6&&h.slice(-6).filter(x=>x==="P").length>h.slice(-6).filter(x=>x==="B").length?"P":"B"],
+ ["ANTI-2",h=>{
+   if(h.length>=2 && h.at(-1)===h.at(-2)){
+    return h.at(-1)==="P"?"B":"P";
+   }
+   return h.at(-1);
+ }]
+];
+
+/* ===== STATE ===== */
+let h=[], playCnt=Array(10).fill(0), winCnt=Array(10).fill(0);
+let mark=Array.from({length:10},()=>[]);
+let blink=true;
+
+/* ===== UI INIT ===== */
+const systemsDiv=document.getElementById("systems");
+SYSTEMS.forEach((s,i)=>{
+ systemsDiv.innerHTML+=`
+ <div class="row" id="row${i}">
+  <span style="width:70px">${s[0]}</span>
+  <span id="bet${i}" style="width:30px">-</span>
+  <span id="pair${i}" style="width:90px">P0 / B0</span>
+  <span class="hist" id="hist${i}"></span>
+ </div>`;
+});
+
+/* ===== BIG / BEAD ===== */
+let big=[...Array(ROWS)].map(()=>Array(COLS).fill(""));
+let bead=[], br=0,bc=0,last=null;
+
+function addBig(v){
+ if(last===null){big[0][0]=v;last=v;return;}
+ if(v===last){
+  if(br+1<ROWS && big[br+1][bc]==="") br++;
+  else{bc++;br=0;}
+ }else{bc++;br=0;}
+ if(bc>=COLS){
+  for(let r=0;r<ROWS;r++) big[r].shift(),big[r].push("");
+  bc=COLS-1;
+ }
+ big[br][bc]=v; last=v;
+}
+
+/* ===== CORE ===== */
+function play(v){
+ if(v==="CLEAR"){
+  h=[];bead=[];last=null;br=bc=0;
+  big=[...Array(ROWS)].map(()=>Array(COLS).fill(""));
+  playCnt.fill(0);winCnt.fill(0);mark.forEach(m=>m.length=0);
+  return;
+ }
+ if(v==="UNDO"){
+  h.pop();bead=[];last=null;br=bc=0;
+  big=[...Array(ROWS)].map(()=>Array(COLS).fill(""));
+  h.forEach(x=>{if(x!=="T")addBig(x);bead.push(x);});
+  return;
+ }
+
+ const preds=predict();
+ h.push(v); bead.push(v);
+
+ if(v==="P"||v==="B"){
+  preds.forEach((p,i)=>{
+   if(!p) return;
+   playCnt[i]++;
+   if(p===v){winCnt[i]++; mark[i].push("/");}
+   else mark[i].push("x");
+   if(mark[i].length>MAX_MARK) mark[i].shift();
+  });
+  addBig(v);
+ }
+}
+
+function predict(){ return SYSTEMS.map(s=>h.length?s[1](h):null); }
+
+function pair(i){
+ if(playCnt[i]===0) return [0,0,0];
+ let p=Math.floor(winCnt[i]/playCnt[i]*100);
+ return [p,100-p,Math.max(p,100-p)];
+}
+
+/* ===== RENDER ===== */
+function render(){
+ const preds=predict();
+ document.getElementById("countbar").textContent=
+  `P=${h.filter(x=>x==="P").length} B=${h.filter(x=>x==="B").length} T=${h.filter(x=>x==="T").length} TOTAL=${h.length}`;
+
+ let sumP=0,sumB=0;
+ preds.forEach((p,i)=>{
+  let [pp,bb]=pair(i);
+  if(p==="P") sumP+=pp;
+  if(p==="B") sumB+=bb;
+ });
+
+ let total=sumP+sumB||1;
+ let pPct=Math.floor(sumP/total*100);
+ let bPct=100-pPct;
+
+ const bar=document.getElementById("betbar");
+ bar.textContent=`P ${pPct} / B ${bPct}`;
+ bar.style.background=pPct>=bPct?(blink?"#16a34a":"#14532d"):(blink?"#dc2626":"#7f1d1d");
+
+ let best=Math.max(...preds.map((_,i)=>pair(i)[2]));
+ preds.forEach((p,i)=>{
+  let [pp,bb,bst]=pair(i);
+  document.getElementById(`bet${i}`).textContent=p||"-";
+  document.getElementById(`pair${i}`).textContent=`P ${pp} / B ${bb}`;
+  document.getElementById(`hist${i}`).innerHTML=
+   mark[i].map(m=>`<span style="color:${m==="/"?"#16a34a":"#dc2626"}">${m}</span>`).join("");
+  document.getElementById(`row${i}`).style.background=
+   bst===best&&bst>0?(blink?(p==="P"?"#16a34a":"#dc2626"):"#0b1220"):"#0b1220";
+ });
+ blink=!blink;
+ drawBig(); drawBead();
+}
+
+function drawBig(){
+ const ctx=bigroad.getContext("2d");
+ ctx.clearRect(0,0,800,140);
+ for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+  let v=big[r][c];
+  if(v){
+   ctx.strokeStyle=v==="P"?"#3b82f6":"#ef4444";
+   ctx.beginPath();
+   ctx.arc(c*CELL+CELL/2,r*CELL+CELL/2,8,0,Math.PI*2);
+   ctx.stroke();
+  }
+ }
+}
+
+function drawBead(){
+ const ctx=beadroad.getContext("2d");
+ ctx.clearRect(0,0,800,140);
+ bead.forEach((v,i)=>{
+  let r=i%ROWS,c=Math.floor(i/ROWS);
+  if(c>=COLS) return;
+  ctx.fillStyle=v==="P"?"#3b82f6":v==="B"?"#ef4444":"#22c55e";
+  ctx.beginPath();
+  ctx.arc(c*CELL+CELL/2,r*CELL+CELL/2,8,0,Math.PI*2);
+  ctx.fill();
+ });
+}
+
+setInterval(render,600);
+</script>
+</body>
+</html>
