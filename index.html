@@ -103,12 +103,12 @@ function login(){
 }
 
 /* ===== EXPIRY CHECK ===== */
-const EXPIRY_DATE = new Date('2026-03-18T23:59:59');
+const EXPIRY_DATE = new Date('2026-03-29T23:59:59');
 if(new Date() > EXPIRY_DATE){
  document.body.innerHTML = `
  <div class="expired">
    <h1>โปรแกรมหมดอายุการใช้งาน</h1>
-   <p>18 มีนาคม พ.ศ. 2569</p>
+   <p>29 มีนาคม พ.ศ. 2569</p>
  </div>`;
  throw new Error("expired");
 }
@@ -134,7 +134,7 @@ if(new Date() > EXPIRY_DATE){
  </div>
 </div>
 
-<div class="expiry-float">Exp : 18 มีนาคม พ.ศ. 2569</div>
+<div class="expiry-float">Exp : 29 มีนาคม พ.ศ. 2569</div>
 
 <script>
 /* ===== CONST ===== */
